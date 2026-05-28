@@ -18,35 +18,18 @@ async function bootstrap(): Promise<void> {
   const app = express();
   const httpServer = createServer(app);
 
-  // WebSocket
   createWSServer(httpServer);
 
-  // Middleware
   app.use(helmet());
-app.use(
-  cors({
-    origin: function(origin, callback) {
-      // Allow requests with no origin (mobile apps, curl, etc)
-      if (!origin) return callback(null, true);
-      
-      const allowedOrigins = [
-        process.env.FRONTEND_URL,
-        "http://localhost:3000",
-        "https://veda-ai-assignment-frontend-ten.vercel.app",
-      ].filter(Boolean);
-      
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.log("CORS blocked:", origin);
-        callback(null, true); // Allow all for now
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+  
+  // ✅ CORS — allow everything in production
+  app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    credentials: false,
+  }));
+
   app.use(morgan(env.NODE_ENV === "development" ? "dev" : "combined"));
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true }));
@@ -57,19 +40,17 @@ app.use(
       status: "ok",
       timestamp: new Date().toISOString(),
       service: "VedaAI Backend",
+      env: env.NODE_ENV,
     });
   });
 
-  // API Routes
   app.use("/api/assignments", assignmentRoutes);
   app.use("/api/papers", paperRoutes);
 
-  // 404
   app.use((_req, res) => {
     res.status(404).json({ success: false, error: "Route not found" });
   });
 
-  // Error handler
   app.use(errorHandler);
 
   httpServer.listen(parseInt(env.PORT), () => {
