@@ -23,12 +23,30 @@ async function bootstrap(): Promise<void> {
 
   // Middleware
   app.use(helmet());
-  app.use(
-    cors({
-      origin: env.FRONTEND_URL,
-      credentials: true,
-    })
-  );
+app.use(
+  cors({
+    origin: function(origin, callback) {
+      // Allow requests with no origin (mobile apps, curl, etc)
+      if (!origin) return callback(null, true);
+      
+      const allowedOrigins = [
+        process.env.FRONTEND_URL,
+        "http://localhost:3000",
+        "https://veda-ai-assignment-frontend-ten.vercel.app",
+      ].filter(Boolean);
+      
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log("CORS blocked:", origin);
+        callback(null, true); // Allow all for now
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
   app.use(morgan(env.NODE_ENV === "development" ? "dev" : "combined"));
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true }));
