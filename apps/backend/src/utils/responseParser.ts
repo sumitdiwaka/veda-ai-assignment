@@ -52,12 +52,13 @@ export function parseAIResponse(raw: string): ParsedPaper {
       const questions: IQuestion[] = ((s.questions as unknown[]) || []).map(
         (q: unknown, qIdx: number) => {
           const question = q as Record<string, unknown>;
-          // const marks = Number(question.marks) || 1;
-          const marks = question.marks !== undefined && question.marks !== null
-            ? Number(question.marks)
-            : config?.marksPerQuestion
-              ? Number(config.marksPerQuestion)
-              : 1;
+
+          // ✅ Fix: marks ko properly parse karo
+          const rawMarks = question.marks;
+          const marks = rawMarks !== undefined && rawMarks !== null
+            ? Number(rawMarks)
+            : 1;
+
           totalMarks += marks;
           totalQuestions += 1;
 
@@ -84,8 +85,7 @@ export function parseAIResponse(raw: string): ParsedPaper {
       return {
         id: sanitizeText(s.id) || `section-${sectionLetter.toLowerCase()}`,
         title: sanitizeText(s.title) || `Section ${sectionLetter}`,
-        instruction:
-          sanitizeText(s.instruction) || "Attempt all questions.",
+        instruction: sanitizeText(s.instruction) || "Attempt all questions.",
         questions,
         totalMarks: sectionMarks,
       };
@@ -95,10 +95,10 @@ export function parseAIResponse(raw: string): ParsedPaper {
   const generalInstructions = Array.isArray(data.generalInstructions)
     ? (data.generalInstructions as unknown[]).map((i) => sanitizeText(i)).filter(Boolean)
     : [
-      "All questions are compulsory unless stated otherwise.",
-      "Read each question carefully before answering.",
-      "Write neatly and legibly.",
-    ];
+        "All questions are compulsory unless stated otherwise.",
+        "Read each question carefully before answering.",
+        "Write neatly and legibly.",
+      ];
 
   return {
     title: sanitizeText(data.title) || "Question Paper",
