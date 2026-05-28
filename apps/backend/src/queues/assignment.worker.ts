@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { env } from "../config/env";
 import { Worker, type Job } from "bullmq";
 import { connectDB } from "../config/db";
 import { redis } from "../config/redis";

@@ -37,17 +37,16 @@ export async function createAssignment(
     let jobId: string | undefined;
     try {
       const job = await assignmentQueue.add(
-        "generate-paper" as never,
+        "generate-paper",
         { assignmentId: assignment._id.toString() },
         { jobId: `assignment-${assignment._id}` }
       );
-
       jobId = job.id;
       await assignment.updateOne({ jobId: job.id });
       console.log(`✅ Job queued: ${job.id}`);
     } catch (queueErr: unknown) {
       const msg = queueErr instanceof Error ? queueErr.message : "unknown";
-      console.error("❌ Queue add failed (will use DB fallback):", msg);
+      console.error("❌ Queue add failed (DB fallback will handle):", msg);
     }
 
     res.status(201).json({
@@ -76,7 +75,7 @@ export async function getAssignments(
       .select("-__v")
       .populate("paperId", "title totalMarks totalQuestions");
     res.json({ success: true, data: assignments });
-  } catch (err: unknown) {
+  } catch {
     res.status(500).json({ success: false, error: "Failed to fetch" });
   }
 }
@@ -86,15 +85,21 @@ export async function getAssignmentById(
   res: Response
 ): Promise<void> {
   try {
-    const assignment = await Assignment.findById(req.params.id)
+    const id = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
+
+    const assignment = await Assignment.findById(id)
       .select("-__v")
       .populate("paperId");
+
     if (!assignment) {
       res.status(404).json({ success: false, error: "Assignment not found" });
       return;
     }
+
     res.json({ success: true, data: assignment });
-  } catch (err: unknown) {
+  } catch {
     res.status(500).json({ success: false, error: "Failed to fetch" });
   }
 }
@@ -104,12 +109,16 @@ export async function getJobStatusById(
   res: Response
 ): Promise<void> {
   try {
-   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    if (!status) {
+    const jobId = Array.isArray(req.params.jobId)
+      ? req.params.jobId[0]
+      : req.params.jobId;
+
+    const jobStatus = await getJobStatus(jobId);
+    if (!jobStatus) {
       res.status(404).json({ success: false, error: "Job not found" });
       return;
     }
-    res.json({ success: true, data: status });
+    res.json({ success: true, data: jobStatus });
   } catch {
     res.status(500).json({ success: false, error: "Failed to get status" });
   }
@@ -120,34 +129,36 @@ export async function regenerateAssignment(
   res: Response
 ): Promise<void> {
   try {
-    const assignment = await Assignment.findById(req.params.id);
+    const id = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
+
+    const assignment = await Assignment.findById(id);
     if (!assignment) {
       res.status(404).json({ success: false, error: "Assignment not found" });
       return;
     }
 
-    // ✅ Delete old paper
     if (assignment.paperId) {
       await QuestionPaper.findByIdAndDelete(assignment.paperId);
     }
 
-    // ✅ Reset to pending — remove paperId completely
-    await Assignment.findByIdAndUpdate(req.params.id, {
+    await Assignment.findByIdAndUpdate(id, {
       $set: { status: "pending" },
       $unset: { paperId: 1, jobId: 1 },
     });
 
-    console.log(`✅ Assignment ${req.params.id} reset for regeneration`);
+    console.log(`✅ Assignment ${id} reset for regeneration`);
 
     let jobId: string | undefined;
     try {
       const job = await assignmentQueue.add(
-        "generate-paper" as never,
-        { assignmentId: req.params.id },
-        { jobId: `regen-${req.params.id}-${Date.now()}` }
+        "generate-paper",
+        { assignmentId: id },
+        { jobId: `regen-${id}-${Date.now()}` }
       );
       jobId = job.id;
-      await Assignment.findByIdAndUpdate(req.params.id, { jobId: job.id });
+      await Assignment.findByIdAndUpdate(id, { jobId: job.id });
     } catch (err) {
       console.log("Queue add failed — DB fallback will handle it");
     }
@@ -155,13 +166,13 @@ export async function regenerateAssignment(
     res.json({
       success: true,
       data: {
-        assignmentId: req.params.id,
-        jobId: jobId || `fallback-${req.params.id}`,
+        assignmentId: id,
+        jobId: jobId || `fallback-${id}`,
         status: "pending",
         message: "Regeneration queued.",
       },
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ success: false, error: "Failed to regenerate" });
   }
 }
