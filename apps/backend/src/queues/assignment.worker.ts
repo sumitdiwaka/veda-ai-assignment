@@ -126,14 +126,19 @@ async function startWorker(): Promise<void> {
   await connectDB();
   console.log("🔧 Starting BullMQ Worker...");
 
-  const worker = new Worker<GenerationJobData>(
-    "assignment-generation",
-    processJob,
-    {
-      connection: redis,
-      concurrency: 1,
-    }
-  );
+const worker = new Worker<GenerationJobData>(
+  "assignment-generation",
+  processJob,
+  {
+    connection: {
+      url: env.REDIS_URL,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      tls: env.REDIS_URL.startsWith("rediss://") ? { rejectUnauthorized: false } : undefined,
+    } as never,
+    concurrency: 1,
+  }
+);
 
   worker.on("active", (job) => {
     console.log(`🟡 Job ${job.id} picked up by worker`);

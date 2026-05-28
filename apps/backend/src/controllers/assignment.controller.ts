@@ -37,10 +37,11 @@ export async function createAssignment(
     let jobId: string | undefined;
     try {
       const job = await assignmentQueue.add(
-        "generate-paper",
+        "generate-paper" as never,
         { assignmentId: assignment._id.toString() },
         { jobId: `assignment-${assignment._id}` }
       );
+
       jobId = job.id;
       await assignment.updateOne({ jobId: job.id });
       console.log(`✅ Job queued: ${job.id}`);
@@ -103,7 +104,7 @@ export async function getJobStatusById(
   res: Response
 ): Promise<void> {
   try {
-    const status = await getJobStatus(req.params.jobId);
+   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     if (!status) {
       res.status(404).json({ success: false, error: "Job not found" });
       return;
@@ -141,7 +142,7 @@ export async function regenerateAssignment(
     let jobId: string | undefined;
     try {
       const job = await assignmentQueue.add(
-        "generate-paper",
+        "generate-paper" as never,
         { assignmentId: req.params.id },
         { jobId: `regen-${req.params.id}-${Date.now()}` }
       );

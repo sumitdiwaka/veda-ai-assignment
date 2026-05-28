@@ -1,44 +1,47 @@
-import Redis from "ioredis";
+import { Redis } from "bullmq";
 import { env } from "./env";
 
-// Parse URL to add proper TLS options for Upstash
-function createRedisConnection(maxRetries: number | null) {
-  return new Redis(env.REDIS_URL, {
-    maxRetriesPerRequest: maxRetries,
+function getRedisOptions() {
+  const url = env.REDIS_URL;
+  const isTLS = url.startsWith("rediss://");
+  
+  return {
+    maxRetriesPerRequest: null as null,
     enableReadyCheck: false,
-    tls: env.REDIS_URL.startsWith("rediss://") ? {
-      rejectUnauthorized: false,
-    } : undefined,
-    retryStrategy(times) {
+    tls: isTLS ? { rejectUnauthorized: false } : undefined,
+    retryStrategy(times: number) {
       if (times > 5) return null;
       return Math.min(times * 1000, 5000);
-    },
-    reconnectOnError(err) {
-      return err.message.includes("ECONNRESET");
     },
     lazyConnect: false,
     keepAlive: 10000,
     connectTimeout: 15000,
-    commandTimeout: 10000,
-  });
+  };
 }
 
-// BullMQ requires maxRetriesPerRequest: null
-export const redis = createRedisConnection(null);
+// BullMQ's own Redis — no conflict
+export const redis = new Redis(env.REDIS_URL, getRedisOptions());
 
-// Cache Redis — normal
-export const redisCache = createRedisConnection(3);
+// Cache Redis — separate instance
+export const redisCache = new Redis(env.REDIS_URL, {
+  ...getRedisOptions(),
+  maxRetriesPerRequest: 3 as unknown as null,
+});
 
 redis.on("connect", () => console.log("✅ Redis (BullMQ) connected"));
-redis.on("error", (err) => {
-  if (!err.message.includes("ECONNRESET") && !err.message.includes("MaxRetries")) {
+redis.on("error", (err: Error) => {
+  if (!err.message.includes("ECONNRESET") &&
+      !err.message.includes("Command timed out") &&
+      !err.message.includes("MaxRetries")) {
     console.error("❌ Redis error:", err.message);
   }
 });
 
 redisCache.on("connect", () => console.log("✅ Redis (cache) connected"));
-redisCache.on("error", (err) => {
-  if (!err.message.includes("ECONNRESET") && !err.message.includes("MaxRetries")) {
+redisCache.on("error", (err: Error) => {
+  if (!err.message.includes("ECONNRESET") &&
+      !err.message.includes("Command timed out") &&
+      !err.message.includes("MaxRetries")) {
     console.error("❌ Redis cache error:", err.message);
   }
 });
