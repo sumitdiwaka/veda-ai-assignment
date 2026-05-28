@@ -2,7 +2,7 @@
 
 ## 🚀 Live Demo
 - Frontend: http://localhost:3000
-- Backend: http://localhost:5000
+- Backend: https://veda-ai-assignment-1-cxam.onrender.com
 
 ## 🏗️ Architecture
 
