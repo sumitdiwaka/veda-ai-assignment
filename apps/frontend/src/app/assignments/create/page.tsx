@@ -337,18 +337,31 @@ export default function CreateAssignmentPage() {
 
   // ✅ Immediately show generating screen
   setGenerating(true);
-  setProgress(5);
-  setProgressMsg("Connecting to server...");
+  setProgress(3);
+  setProgressMsg("Waking up server...");
   setSubmitting(true);
 
-  // ✅ Fake progress animation while waiting for API
-  let fakeProgress = 5;
-  const fakeTimer = setInterval(() => {
-    fakeProgress = Math.min(fakeProgress + 1, 25);
-    setProgress(fakeProgress);
-  }, 1000);
+  // ✅ Progress continuously badhta rahe
+  let currentProgress = 3;
+  const progressTimer = setInterval(() => {
+    currentProgress = Math.min(currentProgress + 0.5, 45);
+    setProgress(Math.round(currentProgress));
+    
+    if (currentProgress < 10) setProgressMsg("Waking up server...");
+    else if (currentProgress < 20) setProgressMsg("Server is ready, creating assignment...");
+    else if (currentProgress < 35) setProgressMsg("Sending data to AI...");
+    else setProgressMsg("AI is preparing your question paper...");
+  }, 800);
 
   try {
+    // ✅ Step 1: Ping server first to wake it up
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "")}/health`);
+      setProgress(15);
+      setProgressMsg("Server awake! Creating assignment...");
+    } catch { /* ignore ping errors */ }
+
+    // ✅ Step 2: Create assignment
     const res = await assignmentService.create({
       title: formData.title,
       subject: formData.subject,
@@ -359,13 +372,13 @@ export default function CreateAssignmentPage() {
       additionalInstructions: formData.additionalInstructions,
     }, formData.file || undefined);
 
-    clearInterval(fakeTimer);
+    clearInterval(progressTimer);
     setAssignmentId(res.assignmentId);
-    setProgress(30);
-    setProgressMsg("Job queued — AI is generating...");
+    setProgress(50);
+    setProgressMsg("Assignment created! AI generating questions...");
     setSubmitting(false);
 
-    // ✅ Recursive polling
+    // ✅ Step 3: Poll for completion
     let attempts = 0;
 
     const poll = async () => {
@@ -398,13 +411,15 @@ export default function CreateAssignmentPage() {
           return;
         }
 
+        // Progress 50 → 95 during AI generation
+        setProgress(p => Math.min(p + 2, 95));
+
         if (assignment.status === "processing") {
-          setProgress(p => Math.min(p + 3, 88));
-          setProgressMsg("AI is generating your question paper...");
+          setProgressMsg("AI is writing your questions...");
         } else {
-          setProgress(p => Math.min(p + 1, 50));
-          setProgressMsg("Waiting for AI worker...");
+          setProgressMsg("Worker processing your request...");
         }
+
       } catch { /* ignore */ }
 
       setTimeout(poll, 4000);
@@ -413,10 +428,56 @@ export default function CreateAssignmentPage() {
     setTimeout(poll, 3000);
 
   } catch (err) {
-    clearInterval(fakeTimer);
+    clearInterval(progressTimer);
     setGenerating(false);
     setSubmitting(false);
-    toast.error(err instanceof Error ? err.message : "Failed to create. Try again.");
+    
+    const msg = err instanceof Error ? err.message : "Failed";
+    
+    // Agar timeout hai toh bhi check karo — paper ban gaya hoga
+    if (msg.includes("timeout")) {
+      toast.error("Server slow hai. Checking if assignment was created...");
+      
+      // Try to find recently created assignment
+      setTimeout(async () => {
+        try {
+          const assignments = await assignmentService.getAll();
+          const recent = assignments[0]; // Latest assignment
+          if (recent && (recent.status === "completed" || recent.status === "processing" || recent.status === "pending")) {
+            setAssignmentId(recent._id);
+            setGenerating(true);
+            setProgress(30);
+            setProgressMsg("Found your assignment! Waiting for completion...");
+            
+            let attempts = 0;
+            const poll = async () => {
+              attempts++;
+              if (attempts > 60) { setGenerating(false); router.push("/assignments"); return; }
+              
+              try {
+                const a = await assignmentService.getById(recent._id);
+                if (a.status === "completed" && a.paperId) {
+                  setProgress(100);
+                  toast.success("🎉 Paper generated!");
+                  setTimeout(() => { reset(); router.push(`/assignments/${recent._id}`); }, 1000);
+                  return;
+                }
+                if (a.status === "failed") { setGenerating(false); toast.error("Failed."); return; }
+                setProgress(p => Math.min(p + 2, 95));
+              } catch { }
+              setTimeout(poll, 4000);
+            };
+            setTimeout(poll, 3000);
+          } else {
+            router.push("/assignments");
+          }
+        } catch {
+          router.push("/assignments");
+        }
+      }, 2000);
+    } else {
+      toast.error(msg);
+    }
   }
 };
     // Generating screen
