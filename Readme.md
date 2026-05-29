@@ -14,7 +14,7 @@
 **A full-stack AI-powered assessment creation platform for teachers.**  
 Create assignments → Generate question papers using AI → Download as PDF
 
-[🚀 Live Demo](#) · [📖 API Docs](#-api-reference) · [🐛 Report Bug](#)
+[🚀 Live Demo](https://veda-ai-assignment-frontend-ten.vercel.app) · [📖 API Docs](#-api-reference) · [🐛 Report Bug](#)
 
 </div>
 
