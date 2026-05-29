@@ -335,59 +335,88 @@ export default function CreateAssignmentPage() {
     const handleSubmit = async () => {
         if (!validate()) return;
         setSubmitting(true);
+
         try {
             const res = await assignmentService.create({
                 title: formData.title,
                 subject: formData.subject,
                 grade: formData.grade,
                 topic: formData.topic,
-                // ✅ Fix: date ko ISO format mein convert karo
                 dueDate: new Date(formData.dueDate + "T23:59:59.000Z").toISOString(),
                 questionConfigs: formData.questionConfigs,
                 additionalInstructions: formData.additionalInstructions,
             }, formData.file || undefined);
 
+            console.log("✅ Assignment created:", res.assignmentId);
+
             setAssignmentId(res.assignmentId);
             setGenerating(true);
-            setProgress(5);
-            setProgressMsg("Job queued, waiting for worker...");
+            setProgress(10);
+            setProgressMsg("Job queued — AI is working...");
 
-            // ✅ Polling fallback — har 3 second mein check karo
-            const pollInterval = setInterval(async () => {
+            // Poll every 4 seconds
+            let attempts = 0;
+            const maxAttempts = 45; // 3 minutes
+
+            const poll = async () => {
+                if (attempts >= maxAttempts) {
+                    setGenerating(false);
+                    toast.error("Timed out. Check assignments page.");
+                    router.push("/assignments");
+                    return;
+                }
+
+                attempts++;
+                console.log(`🔄 Poll attempt ${attempts}`);
+
                 try {
                     const assignment = await assignmentService.getById(res.assignmentId);
+                    console.log("📊 Status:", assignment.status, "paperId:", assignment.paperId);
+
                     if (assignment.status === "completed" && assignment.paperId) {
-                        clearInterval(pollInterval);
                         setProgress(100);
-                        setProgressMsg("Done!");
-                        toast.success("Question paper generated!");
+                        setProgressMsg("Done! Redirecting...");
+                        toast.success("🎉 Question paper generated!");
                         setTimeout(() => {
                             reset();
                             router.push(`/assignments/${res.assignmentId}`);
-                        }, 800);
-                    } else if (assignment.status === "failed") {
-                        clearInterval(pollInterval);
+                        }, 1000);
+                        return; // Stop polling
+                    }
+
+                    if (assignment.status === "failed") {
                         setGenerating(false);
                         toast.error("Generation failed. Please try again.");
-                    } else if (assignment.status === "processing") {
-                        setProgress(prev => Math.min(prev + 10, 85));
-                        setProgressMsg("AI is generating your question paper...");
+                        return;
                     }
-                } catch { }
-            }, 3000);
-            const maxAttempts = 60;
 
- 
-            // 2 minute timeout
-            setTimeout(() => clearInterval(pollInterval), 120000);
+                    if (assignment.status === "processing") {
+                        setProgress(Math.min(10 + attempts * 5, 85));
+                        setProgressMsg("AI is generating your question paper...");
+                    } else {
+                        setProgress(Math.min(10 + attempts * 2, 40));
+                        setProgressMsg("Waiting for worker...");
+                    }
+
+                    // Next poll
+                    setTimeout(poll, 4000);
+
+                } catch (err) {
+                    console.error("Poll error:", err);
+                    setTimeout(poll, 4000);
+                }
+            };
+
+            // Start polling after 2 seconds
+            setTimeout(poll, 2000);
+
         } catch (err) {
+            console.error("Create error:", err);
             toast.error(err instanceof Error ? err.message : "Failed to create");
+            setGenerating(false);
         } finally {
             setSubmitting(false);
         }
-    };
-    const updateConfig = (i: number, field: string, value: unknown) => {
-        updateQuestionConfig(i, { [field]: value } as never);
     };
 
     // Generating screen
