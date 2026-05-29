@@ -1,4 +1,4 @@
-import api from "./api";
+import api, { apiLong } from "./api";
 import type { Assignment, CreateAssignmentPayload } from "@/types/assignment";
 
 export const assignmentService = {
@@ -12,28 +12,19 @@ export const assignmentService = {
     return res.data.data;
   },
 
-  async create(
-    payload: CreateAssignmentPayload,
-    file?: File
-  ): Promise<{ assignmentId: string; jobId: string }> {
-    
-    // If no file — send as JSON directly (cleaner)
+  async create(payload: CreateAssignmentPayload, file?: File): Promise<{ assignmentId: string; jobId: string }> {
     if (!file) {
-      const res = await api.post("/assignments", {
-        ...payload,
-        // questionConfigs already an array — send as-is
-      });
+      // ✅ apiLong use karo
+      const res = await apiLong.post("/assignments", payload);
       return res.data.data;
     }
 
-    // If file — use FormData
     const formData = new FormData();
     formData.append("title", payload.title);
     formData.append("subject", payload.subject);
     formData.append("grade", payload.grade);
     formData.append("topic", payload.topic);
     formData.append("dueDate", payload.dueDate);
-    // ✅ Key fix: each config as separate indexed fields
     payload.questionConfigs.forEach((config, index) => {
       formData.append(`questionConfigs[${index}][type]`, config.type);
       formData.append(`questionConfigs[${index}][count]`, String(config.count));
@@ -47,7 +38,8 @@ export const assignmentService = {
     }
     formData.append("file", file);
 
-    const res = await api.post("/assignments", formData, {
+    // ✅ apiLong use karo
+    const res = await apiLong.post("/assignments", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data.data;
