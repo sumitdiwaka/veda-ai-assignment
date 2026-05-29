@@ -336,6 +336,11 @@ export default function CreateAssignmentPage() {
         if (!validate()) return;
         setSubmitting(true);
 
+        // ✅ Pehle generating screen dikhao
+        setGenerating(true);
+        setProgress(5);
+        setProgressMsg("Creating assignment...");
+
         try {
             const res = await assignmentService.create({
                 title: formData.title,
@@ -348,30 +353,28 @@ export default function CreateAssignmentPage() {
             }, formData.file || undefined);
 
             console.log("✅ Assignment created:", res.assignmentId);
-
             setAssignmentId(res.assignmentId);
-            setGenerating(true);
             setProgress(10);
             setProgressMsg("Job queued — AI is working...");
+            setSubmitting(false);
 
-            // Poll every 4 seconds
+            // Recursive polling
             let attempts = 0;
-            const maxAttempts = 45; // 3 minutes
 
             const poll = async () => {
-                if (attempts >= maxAttempts) {
+                attempts++;
+                console.log(`🔄 Poll attempt ${attempts}`);
+
+                if (attempts > 45) {
                     setGenerating(false);
                     toast.error("Timed out. Check assignments page.");
                     router.push("/assignments");
                     return;
                 }
 
-                attempts++;
-                console.log(`🔄 Poll attempt ${attempts}`);
-
                 try {
                     const assignment = await assignmentService.getById(res.assignmentId);
-                    console.log("📊 Status:", assignment.status, "paperId:", assignment.paperId);
+                    console.log("📊 Status:", assignment.status);
 
                     if (assignment.status === "completed" && assignment.paperId) {
                         setProgress(100);
@@ -381,7 +384,7 @@ export default function CreateAssignmentPage() {
                             reset();
                             router.push(`/assignments/${res.assignmentId}`);
                         }, 1000);
-                        return; // Stop polling
+                        return;
                     }
 
                     if (assignment.status === "failed") {
@@ -391,34 +394,31 @@ export default function CreateAssignmentPage() {
                     }
 
                     if (assignment.status === "processing") {
-                        setProgress(Math.min(10 + attempts * 5, 85));
+                        setProgress(Math.min(15 + attempts * 5, 85));
                         setProgressMsg("AI is generating your question paper...");
                     } else {
-                        setProgress(Math.min(10 + attempts * 2, 40));
-                        setProgressMsg("Waiting for worker...");
+                        setProgress(Math.min(10 + attempts * 2, 35));
+                        setProgressMsg("Waiting for worker to pick up job...");
                     }
 
-                    // Next poll
                     setTimeout(poll, 4000);
 
                 } catch (err) {
                     console.error("Poll error:", err);
-                    setTimeout(poll, 4000);
+                    setTimeout(poll, 5000);
                 }
             };
 
-            // Start polling after 2 seconds
-            setTimeout(poll, 2000);
+            setTimeout(poll, 3000);
 
         } catch (err) {
             console.error("Create error:", err);
-            toast.error(err instanceof Error ? err.message : "Failed to create");
             setGenerating(false);
+            toast.error(err instanceof Error ? err.message : "Failed to create");
         } finally {
             setSubmitting(false);
         }
     };
-
     // Generating screen
     if (generating) {
         return (
