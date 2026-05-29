@@ -375,7 +375,9 @@ export default function CreateAssignmentPage() {
                     }
                 } catch { }
             }, 3000);
+            const maxAttempts = 60;
 
+ 
             // 2 minute timeout
             setTimeout(() => clearInterval(pollInterval), 120000);
         } catch (err) {
